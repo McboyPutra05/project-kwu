@@ -2,14 +2,14 @@
 core/security.py
 
 Utilitas keamanan: JWT token management dan password hashing.
-Menggunakan python-jose untuk JWT dan passlib untuk bcrypt hashing.
+Menggunakan python-jose untuk JWT dan bcrypt langsung untuk password hashing.
 """
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from core.config import settings
 
@@ -17,19 +17,21 @@ from core.config import settings
 # ─────────────────────────────────────────────────────────────────
 # Password Hashing
 # ─────────────────────────────────────────────────────────────────
-
-# CryptContext dengan bcrypt — auto-deprecated scheme untuk upgrade mudah
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Menggunakan bcrypt langsung (bukan passlib) untuk menghindari
+# bug kompatibilitas passlib dengan bcrypt versi terbaru.
 
 
 def hash_password(password: str) -> str:
     """Hash password menggunakan bcrypt."""
-    return pwd_context.hash(password)
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifikasi password plain text terhadap hash yang tersimpan."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return _bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    except Exception:
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────

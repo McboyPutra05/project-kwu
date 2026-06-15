@@ -110,7 +110,10 @@ services:
     container_name: financebot_frontend
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8100
+      # BACKEND_URL: dipakai Next.js server (proxy rewrites) - bisa pakai internal Docker hostname
+      - BACKEND_URL=http://backend:8000
+      # NEXT_PUBLIC_API_URL: dipakai browser - gunakan path proxy relative agar tidak perlu rebuild
+      - NEXT_PUBLIC_API_URL=
     ports:
       - "3100:3000"
     depends_on:
@@ -125,6 +128,9 @@ services:
     image: evoapicloud/evolution-api:latest
     container_name: financebot_evolution
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
     ports:
       - "8182:8080"
@@ -144,7 +150,7 @@ services:
       - CONFIG_SESSION_PHONE_CLIENT=FinanceBot UMKM
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - QRCODE_LIMIT=30
-      - LOG_LEVEL=ERROR
+      - LOG_LEVEL=DEBUG
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-secretredis123}@redis:6379/0
       - CACHE_REDIS_PREFIX_KEY=evolution
