@@ -10,32 +10,23 @@ from utils.number_formatter import format_rupiah
 
 
 # ─────────────────────────────────────────────────────────────────
-# Menu Utama
+# Menu Utama (untuk List Message — teks di atas tombol)
 # ─────────────────────────────────────────────────────────────────
 
-WELCOME_MESSAGE = """👋 *Selamat datang di FinanceBot UMKM!*
+WELCOME_TEXT = """👋 *Selamat datang di FinanceBot UMKM!*
 
 Saya siap membantu Anda mencatat keuangan bisnis dengan mudah.
 
-Apa yang bisa saya bantu?
+Silakan pilih menu di bawah untuk memulai 👇"""
 
-1️⃣ *Pemasukan* — Catat uang masuk
-2️⃣ *Pengeluaran* — Catat uang keluar
-3️⃣ *Hutang* — Catat hutang
-4️⃣ *Laporan* — Lihat laporan keuangan
+# Keep old constants for backward compatibility (fallback text)
+WELCOME_MESSAGE = WELCOME_TEXT
 
-Ketik angka atau nama menu di atas 👆"""
+MENU_TEXT = """📋 *Menu Utama FinanceBot UMKM*
 
-MENU_MESSAGE = """📋 *Menu Utama FinanceBot UMKM*
+Silakan pilih menu yang ingin Anda gunakan 👇"""
 
-Pilih menu yang ingin Anda gunakan:
-
-1️⃣ *Pemasukan*
-2️⃣ *Pengeluaran*
-3️⃣ *Hutang*
-4️⃣ *Laporan*
-
-Ketik angka atau nama menu 👆"""
+MENU_MESSAGE = MENU_TEXT
 
 HELP_MESSAGE = """❓ *Bantuan FinanceBot UMKM*
 
@@ -48,6 +39,8 @@ Kata kunci yang bisa digunakan:
 • *Laporan Hari Ini* — Laporan harian
 • *Laporan Bulan Ini* — Laporan bulanan
 • *Batal* — Batalkan input saat ini
+
+💡 Anda juga bisa langsung klik tombol di bawah pesan untuk navigasi yang lebih mudah!
 
 Butuh bantuan lebih? Hubungi admin."""
 
@@ -89,14 +82,13 @@ Contoh:
 
 Atau ketik *Batal* untuk kembali ke menu."""
 
-REPORT_MENU = """📊 *Laporan Keuangan*
+REPORT_MENU_TEXT = """📊 *Laporan Keuangan*
 
-Pilih jenis laporan:
+Pilih jenis laporan yang ingin Anda lihat.
+Setiap laporan disertai file Excel yang bisa diunduh 📎"""
 
-1️⃣ *Laporan Hari Ini*
-2️⃣ *Laporan Bulan Ini*
-
-Atau ketik *Menu* untuk kembali."""
+# Keep old constant for backward compatibility
+REPORT_MENU = REPORT_MENU_TEXT
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -110,7 +102,7 @@ def income_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Ketik *Menu* untuk kembali atau langsung catat lagi."""
+Mau catat lagi? Pilih menu di bawah 👇"""
 
 
 def expense_success(description: str, amount: float, date_str: str) -> str:
@@ -120,7 +112,7 @@ def expense_success(description: str, amount: float, date_str: str) -> str:
 💸 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Ketik *Menu* untuk kembali atau langsung catat lagi."""
+Mau catat lagi? Pilih menu di bawah 👇"""
 
 
 def debt_success(description: str, amount: float, date_str: str) -> str:
@@ -130,7 +122,7 @@ def debt_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Ketik *Menu* untuk kembali."""
+Pilih menu di bawah untuk melanjutkan 👇"""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -160,7 +152,7 @@ def daily_report(
 
 📝 Total Transaksi: {tx_count}
 ━━━━━━━━━━━━━━━━━━
-Ketik *Menu* untuk kembali."""
+📎 _File Excel detail terlampir di bawah._"""
 
 
 def monthly_report(
@@ -193,7 +185,7 @@ def monthly_report(
 📝 Total Transaksi: {tx_count}
 🔴 Hutang Belum Lunas: {debt_count}
 ━━━━━━━━━━━━━━━━━━
-Ketik *Menu* untuk kembali."""
+📎 _File Excel detail terlampir di bawah._"""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -231,11 +223,12 @@ Mulai catat dengan:
 
 Ketik *Menu* untuk kembali."""
 
-CANCELLED_MESSAGE = """🔙 *Dibatalkan*
+CANCELLED_TEXT = """🔙 *Dibatalkan*
 
-Kembali ke menu utama.
+Kembali ke menu utama. Pilih menu di bawah 👇"""
 
-""" + MENU_MESSAGE
+# Keep old constant
+CANCELLED_MESSAGE = CANCELLED_TEXT + "\n\n" + MENU_TEXT
 
 UNKNOWN_MESSAGE = """🤔 Maaf, saya tidak mengerti pesan Anda.
 

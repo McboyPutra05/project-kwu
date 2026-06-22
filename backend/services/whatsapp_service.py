@@ -179,3 +179,169 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"❌ Cannot check Evolution API status: {e}")
             return {"state": "error", "error": str(e)}
+
+    async def send_button_message(
+        self,
+        phone_number: str,
+        text: str,
+        buttons: list[dict],
+        footer: str = "FinanceBot UMKM",
+    ) -> bool:
+        """
+        Kirim pesan dengan tombol interaktif (max 3 tombol).
+        
+        Digunakan untuk menu dengan sedikit opsi (laporan: 2 pilihan).
+        Jika gagal, fallback ke pesan teks biasa.
+        
+        Args:
+            phone_number: Nomor tujuan "628xxx"
+            text: Isi pesan utama
+            buttons: List of {"displayText": "...", "id": "..."}
+            footer: Teks kecil di bawah (opsional)
+        """
+        url = f"{self._base_url}/message/sendButtons/{self._instance}"
+
+        payload = {
+            "number": phone_number,
+            "title": "",
+            "description": text,
+            "footer": footer,
+            "buttons": [
+                {"type": "reply", "displayText": btn["displayText"], "id": btn.get("id", btn["displayText"])}
+                for btn in buttons
+            ],
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    url, json=payload, headers=self._headers
+                )
+                response.raise_for_status()
+                logger.debug(f"🔘 Button message sent to {phone_number}")
+                return True
+
+        except Exception as e:
+            logger.warning(f"⚠️ Button message failed, falling back to text: {e}")
+            # Fallback: kirim sebagai teks biasa
+            return await self.send_text_message(phone_number, text)
+
+    async def send_list_message(
+        self,
+        phone_number: str,
+        text: str,
+        button_text: str,
+        sections: list[dict],
+        footer: str = "FinanceBot UMKM",
+        delay_ms: int = 0,
+    ) -> bool:
+        """
+        Kirim pesan dengan daftar interaktif (list message).
+        
+        Digunakan untuk menu utama yang punya >3 opsi.
+        User klik tombol → muncul popup list → pilih → otomatis terkirim.
+        
+        Args:
+            phone_number: Nomor tujuan
+            text: Pesan utama
+            button_text: Teks tombol (misal: "Pilih Menu")
+            sections: List of {"title": "...", "rows": [{"title": "...", "rowId": "...", "description": "..."}]}
+            footer: Teks kecil di bawah
+        """
+        url = f"{self._base_url}/message/sendList/{self._instance}"
+
+        payload = {
+            "number": phone_number,
+            "title": "",
+            "description": text,
+            "buttonText": button_text,
+            "footerText": footer,
+            "sections": sections,
+            "delay": delay_ms,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    url, json=payload, headers=self._headers
+                )
+                response.raise_for_status()
+                logger.debug(f"📋 List message sent to {phone_number}")
+                return True
+
+        except Exception as e:
+            logger.warning(f"⚠️ List message failed, falling back to text: {e}")
+            return await self.send_text_message(phone_number, text, delay_ms=delay_ms)
+
+    async def send_document(
+        self,
+        phone_number: str,
+        file_path: str,
+        filename: str,
+        caption: str = "",
+    ) -> bool:
+        """
+        Kirim file dokumen (Excel, PDF, dll) via WhatsApp.
+        
+        Menggunakan Evolution API sendMedia endpoint dengan mediatype=document.
+        File dibaca dari disk, di-encode base64, dan dikirim.
+        
+        Args:
+            phone_number: Nomor tujuan
+            file_path: Path absolut ke file yang akan dikirim
+            filename: Nama file yang ditampilkan ke user
+            caption: Pesan tambahan yang menyertai file
+        """
+        import base64
+        import os
+
+        url = f"{self._base_url}/message/sendMedia/{self._instance}"
+
+        try:
+            if not os.path.exists(file_path):
+                logger.error(f"❌ File not found: {file_path}")
+                return False
+
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+            
+            b64_data = base64.b64encode(file_bytes).decode("utf-8")
+            
+            # Tentukan mimetype dari ekstensi
+            ext = os.path.splitext(filename)[1].lower()
+            mime_map = {
+                ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".xls": "application/vnd.ms-excel",
+                ".pdf": "application/pdf",
+                ".csv": "text/csv",
+            }
+            mimetype = mime_map.get(ext, "application/octet-stream")
+
+            payload = {
+                "number": phone_number,
+                "mediatype": "document",
+                "mimetype": mimetype,
+                "caption": caption,
+                "fileName": filename,
+                "media": f"data:{mimetype};base64,{b64_data}",
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url, json=payload, headers=self._headers
+                )
+                response.raise_for_status()
+                logger.info(f"📎 Document '{filename}' sent to {phone_number}")
+                return True
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"❌ HTTP error sending document to {phone_number}: "
+                f"{e.response.status_code} - {e.response.text}"
+            )
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ Failed to send document to {phone_number}: {e}")
+            return False
+

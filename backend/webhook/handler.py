@@ -99,7 +99,8 @@ def _extract_message_text(message_data) -> Optional[str]:
     Ekstrak teks dari berbagai tipe pesan WhatsApp.
 
     WhatsApp memiliki banyak tipe pesan (text, image caption, dll).
-    Kita ambil teks dari tipe yang paling umum.
+    Kita ambil teks dari tipe yang paling umum, termasuk
+    response dari button/list interactive messages.
     """
     if not message_data.message:
         return None
@@ -113,6 +114,24 @@ def _extract_message_text(message_data) -> Optional[str]:
     # Extended text (pesan dengan preview link, format, dll)
     if msg.extendedTextMessage:
         return msg.extendedTextMessage.get("text", "")
+
+    # Button response — user klik tombol interaktif
+    if msg.buttonsResponseMessage:
+        # selectedButtonId berisi ID tombol yang dipilih user
+        btn_id = msg.buttonsResponseMessage.get("selectedButtonId", "")
+        if btn_id:
+            return btn_id
+        # Fallback ke displayText
+        return msg.buttonsResponseMessage.get("selectedDisplayText", "")
+
+    # List response — user pilih item dari daftar
+    if msg.listResponseMessage:
+        single_select = msg.listResponseMessage.get("singleSelectReply", {})
+        row_id = single_select.get("selectedRowId", "")
+        if row_id:
+            return row_id
+        # Fallback ke title
+        return msg.listResponseMessage.get("title", "")
 
     return None
 

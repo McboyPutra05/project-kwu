@@ -24,9 +24,12 @@ class MessageKey(BaseModel):
 
 
 class TextMessage(BaseModel):
-    """Konten pesan teks."""
+    """Konten pesan teks, termasuk button/list response."""
     conversation: Optional[str] = None
     extendedTextMessage: Optional[Dict[str, Any]] = None
+    # Button/List interactive response fields
+    buttonsResponseMessage: Optional[Dict[str, Any]] = None
+    listResponseMessage: Optional[Dict[str, Any]] = None
 
 
 class MessageData(BaseModel):

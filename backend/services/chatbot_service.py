@@ -17,7 +17,7 @@ sehingga state persists meskipun server restart.
 │      │                                                       │
 │      │ halo/hai/menu/start/1/2/3/4                           │
 │      ▼                                                       │
-│  [menu_main]                                                 │
+│  [menu_main]  → Interactive List Message                     │
 │      │                                                       │
 │      ├── "Pemasukan" / "1" ──→ [awaiting_income_input]       │
 │      │                               │                       │
@@ -35,29 +35,40 @@ sehingga state persists meskipun server restart.
 │      │                               └──→ Simpan → [IDLE]   │
 │      │                                                       │
 │      └── "Laporan" / "4" ──→ [report_menu]                  │
-│                                       │                      │
+│                                       │  (Button Message)    │
 │                                       ├── "Hari Ini" / "1"  │
 │                                       │     └──→ Laporan     │
-│                                       │                      │
+│                                       │         + Excel 📎   │
 │                                       └── "Bulan Ini" / "2" │
 │                                             └──→ Laporan     │
+│                                                 + Excel 📎   │
 └──────────────────────────────────────────────────────────────┘
 """
 
-from loguru import logger  # type: ignore
+import os
 import random
+
+from loguru import logger  # type: ignore
 
 from models.log import Log
 from models.user import User
+from repositories.transaction_repository import TransactionRepository
 from repositories.user_repository import UserRepository
 from schemas.webhook import ParsedIncomingMessage
 from services.debt_service import DebtService
+from services.excel_service import ExcelService
 from services.report_service import ReportService
 from services.transaction_service import TransactionService
 from services.user_service import UserService
 from services.whatsapp_service import WhatsAppService
 from utils import message_templates as tmpl
-from utils.date_helper import format_short_date_id, now_wib
+from utils.date_helper import (
+    format_short_date_id,
+    get_current_month_range,
+    get_month_name_id,
+    get_today_range,
+    now_wib,
+)
 from utils.number_formatter import parse_amount
 
 # ─────────────────────────────────────────────────────────────────
@@ -65,14 +76,56 @@ from utils.number_formatter import parse_amount
 # ─────────────────────────────────────────────────────────────────
 
 GREETING_KEYWORDS = {"halo", "hai", "hello", "hi", "start", "mulai", "menu", "home"}
-INCOME_KEYWORDS = {"pemasukan", "masuk", "income", "1"}
-EXPENSE_KEYWORDS = {"pengeluaran", "keluar", "expense", "pengeluaran", "2"}
-DEBT_KEYWORDS = {"hutang", "utang", "debt", "3"}
-REPORT_KEYWORDS = {"laporan", "report", "4"}
+INCOME_KEYWORDS = {"pemasukan", "masuk", "income", "1", "catat pemasukan"}
+EXPENSE_KEYWORDS = {"pengeluaran", "keluar", "expense", "pengeluaran", "2", "catat pengeluaran"}
+DEBT_KEYWORDS = {"hutang", "utang", "debt", "3", "catat hutang"}
+REPORT_KEYWORDS = {"laporan", "report", "4", "lihat laporan"}
 CANCEL_KEYWORDS = {"batal", "cancel", "kembali", "back"}
 DAILY_REPORT_KEYWORDS = {"laporan hari ini", "hari ini", "1", "daily"}
 MONTHLY_REPORT_KEYWORDS = {"laporan bulan ini", "bulan ini", "2", "monthly"}
 HELP_KEYWORDS = {"bantuan", "help", "?"}
+
+# ─────────────────────────────────────────────────────────────────
+# Interactive Menu Definitions
+# ─────────────────────────────────────────────────────────────────
+
+MAIN_MENU_SECTIONS = [
+    {
+        "title": "📋 Menu Utama",
+        "rows": [
+            {
+                "title": "📥 Catat Pemasukan",
+                "rowId": "1",
+                "description": "Catat uang masuk ke bisnis Anda",
+            },
+            {
+                "title": "📤 Catat Pengeluaran",
+                "rowId": "2",
+                "description": "Catat uang keluar dari bisnis Anda",
+            },
+            {
+                "title": "💳 Catat Hutang",
+                "rowId": "3",
+                "description": "Catat hutang yang perlu dibayar",
+            },
+            {
+                "title": "📊 Lihat Laporan",
+                "rowId": "4",
+                "description": "Laporan harian & bulanan + Export Excel",
+            },
+        ],
+    }
+]
+
+REPORT_BUTTONS = [
+    {"displayText": "📊 Laporan Hari Ini", "id": "1"},
+    {"displayText": "📈 Laporan Bulan Ini", "id": "2"},
+    {"displayText": "🔙 Kembali", "id": "batal"},
+]
+
+BACK_TO_MENU_BUTTONS = [
+    {"displayText": "📋 Menu Utama", "id": "menu"},
+]
 
 
 class ChatbotService:
@@ -95,9 +148,11 @@ class ChatbotService:
         self._user_service = user_service
         self._user_repo = user_repository
         self._tx_service = transaction_service
+        self._tx_repo = TransactionRepository()
         self._debt_service = debt_service
         self._report_service = report_service
         self._wa_service = whatsapp_service
+        self._excel_service = ExcelService()
 
     async def process_message(self, incoming: ParsedIncomingMessage) -> None:
         """
@@ -107,7 +162,7 @@ class ChatbotService:
         1. Dapatkan/buat user
         2. Cek session_state user
         3. Proses pesan berdasarkan state
-        4. Kirim balasan via WhatsApp
+        4. Kirim balasan via WhatsApp (teks / button / list)
         5. Log percakapan
         """
         phone = incoming.phone_number
@@ -123,36 +178,96 @@ class ChatbotService:
         )
 
         # ── 2. Tentukan response berdasarkan state ─────────────
-        response_text = await self._dispatch(
+        response = await self._dispatch(
             user=user, text=text, text_lower=text_lower
         )
 
         # ── 3. Tandai sudah dibaca & Kirim balasan via WhatsApp ─
-        # Simulasi human: Baca dulu (centang biru)
         if incoming.message_id:
             await self._wa_service.mark_as_read(phone, incoming.message_id)
 
-        # Simulasi human: Ngetik 1-2 detik sebelum balas
+        # Simulasi human: delay sebelum balas
         delay_ms = random.randint(1000, 2000)
-        await self._wa_service.send_text_message(
-            phone_number=phone,
-            message=response_text,
-            delay_ms=delay_ms,
-        )
 
-        # ── 4. Simpan log percakapan ───────────────────────────
-        await self._save_log(phone=phone, message=text, response=response_text)
+        # ── 4. Kirim response berdasarkan tipe ─────────────────
+        if isinstance(response, dict):
+            # Interactive message (button / list / document combo)
+            msg_type = response.get("type", "text")
 
-    async def _dispatch(self, user: User, text: str, text_lower: str) -> str:
+            if msg_type == "list":
+                await self._wa_service.send_list_message(
+                    phone_number=phone,
+                    text=response["text"],
+                    button_text=response.get("button_text", "Pilih Menu"),
+                    sections=response["sections"],
+                    delay_ms=delay_ms,
+                )
+            elif msg_type == "buttons":
+                await self._wa_service.send_button_message(
+                    phone_number=phone,
+                    text=response["text"],
+                    buttons=response["buttons"],
+                )
+            elif msg_type == "report":
+                # Kirim teks laporan dulu
+                await self._wa_service.send_text_message(
+                    phone_number=phone,
+                    message=response["text"],
+                    delay_ms=delay_ms,
+                )
+                # Kirim file Excel
+                if "excel_path" in response and response["excel_path"]:
+                    await self._wa_service.send_document(
+                        phone_number=phone,
+                        file_path=response["excel_path"],
+                        filename=response.get("excel_filename", "Laporan.xlsx"),
+                        caption="📎 Berikut file Excel laporan Anda.",
+                    )
+                    # Cleanup temp file
+                    try:
+                        os.remove(response["excel_path"])
+                    except OSError:
+                        pass
+                # Kirim tombol kembali ke menu
+                await self._wa_service.send_button_message(
+                    phone_number=phone,
+                    text="Apa yang ingin Anda lakukan selanjutnya?",
+                    buttons=BACK_TO_MENU_BUTTONS,
+                )
+            else:
+                await self._wa_service.send_text_message(
+                    phone_number=phone,
+                    message=response.get("text", ""),
+                    delay_ms=delay_ms,
+                )
+        else:
+            # Plain text response
+            await self._wa_service.send_text_message(
+                phone_number=phone,
+                message=response,
+                delay_ms=delay_ms,
+            )
+
+        # ── 5. Simpan log percakapan ───────────────────────────
+        log_text = response["text"] if isinstance(response, dict) else response
+        await self._save_log(phone=phone, message=text, response=log_text)
+
+    async def _dispatch(self, user: User, text: str, text_lower: str) -> str | dict:
         """
         Router utama — tentukan handler berdasarkan session_state.
+        Returns either a string (text) or dict (interactive message).
         """
         current_state = user.session_state
 
         # ── Cancel selalu bisa dilakukan dari state apapun ──
         if text_lower in CANCEL_KEYWORDS:
             await self._user_repo.update_session_state(user, None)
-            return tmpl.CANCELLED_MESSAGE
+            return {
+                "type": "list",
+                "text": tmpl.CANCELLED_TEXT,
+                "button_text": "Pilih Menu",
+                "sections": MAIN_MENU_SECTIONS,
+            }
 
         # ── Help selalu bisa dilakukan dari state apapun ────
         if text_lower in HELP_KEYWORDS:
@@ -175,22 +290,32 @@ class ChatbotService:
             return await self._handle_report_menu(user, text_lower)
 
         else:
-            # State tidak dikenal — reset ke idle
+            # State tidak dikenal — reset ke idle dan tampilkan menu
             await self._user_repo.update_session_state(user, None)
-            return tmpl.MENU_MESSAGE
+            return {
+                "type": "list",
+                "text": tmpl.WELCOME_TEXT,
+                "button_text": "Pilih Menu",
+                "sections": MAIN_MENU_SECTIONS,
+            }
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Menu Utama
     # ─────────────────────────────────────────────────────────────
 
-    async def _handle_menu(self, user: User, text_lower: str) -> str:
+    async def _handle_menu(self, user: User, text_lower: str) -> str | dict:
         """
         Handle pesan ketika user di menu utama atau idle.
         """
-        # Salam / inisiasi
+        # Salam / inisiasi → kirim list message
         if text_lower in GREETING_KEYWORDS:
             await self._user_repo.update_session_state(user, "menu_main")
-            return tmpl.WELCOME_MESSAGE
+            return {
+                "type": "list",
+                "text": tmpl.WELCOME_TEXT,
+                "button_text": "Pilih Menu",
+                "sections": MAIN_MENU_SECTIONS,
+            }
 
         # Navigasi ke sub-menu
         if text_lower in INCOME_KEYWORDS:
@@ -207,7 +332,11 @@ class ChatbotService:
 
         if text_lower in REPORT_KEYWORDS:
             await self._user_repo.update_session_state(user, "report_menu")
-            return tmpl.REPORT_MENU
+            return {
+                "type": "buttons",
+                "text": tmpl.REPORT_MENU_TEXT,
+                "buttons": REPORT_BUTTONS,
+            }
 
         # Shortcut laporan langsung
         if "hari ini" in text_lower:
@@ -223,7 +352,7 @@ class ChatbotService:
     # Handler: Input Pemasukan
     # ─────────────────────────────────────────────────────────────
 
-    async def _handle_income_input(self, user: User, text: str) -> str:
+    async def _handle_income_input(self, user: User, text: str) -> str | dict:
         """
         Proses input pemasukan dari user.
         Format yang diharapkan: "Nama Pemasukan, Jumlah"
@@ -248,13 +377,18 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return tmpl.income_success(description, amount, date_str)
+        return {
+            "type": "list",
+            "text": tmpl.income_success(description, amount, date_str),
+            "button_text": "Pilih Menu",
+            "sections": MAIN_MENU_SECTIONS,
+        }
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Input Pengeluaran
     # ─────────────────────────────────────────────────────────────
 
-    async def _handle_expense_input(self, user: User, text: str) -> str:
+    async def _handle_expense_input(self, user: User, text: str) -> str | dict:
         """
         Proses input pengeluaran dari user.
         Format yang diharapkan: "Nama Pengeluaran, Jumlah"
@@ -277,13 +411,18 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return tmpl.expense_success(description, amount, date_str)
+        return {
+            "type": "list",
+            "text": tmpl.expense_success(description, amount, date_str),
+            "button_text": "Pilih Menu",
+            "sections": MAIN_MENU_SECTIONS,
+        }
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Input Hutang
     # ─────────────────────────────────────────────────────────────
 
-    async def _handle_debt_input(self, user: User, text: str) -> str:
+    async def _handle_debt_input(self, user: User, text: str) -> str | dict:
         """
         Proses input hutang dari user.
         Format yang diharapkan: "Nama Hutang, Jumlah"
@@ -306,13 +445,18 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return tmpl.debt_success(description, amount, date_str)
+        return {
+            "type": "list",
+            "text": tmpl.debt_success(description, amount, date_str),
+            "button_text": "Pilih Menu",
+            "sections": MAIN_MENU_SECTIONS,
+        }
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Menu Laporan
     # ─────────────────────────────────────────────────────────────
 
-    async def _handle_report_menu(self, user: User, text_lower: str) -> str:
+    async def _handle_report_menu(self, user: User, text_lower: str) -> str | dict:
         """
         Handle pilihan di menu laporan.
         """
@@ -325,38 +469,71 @@ class ChatbotService:
             return await self._generate_monthly_report(user)
 
         # Pilihan tidak valid
-        return tmpl.REPORT_MENU
+        return {
+            "type": "buttons",
+            "text": tmpl.REPORT_MENU_TEXT,
+            "buttons": REPORT_BUTTONS,
+        }
 
     # ─────────────────────────────────────────────────────────────
-    # Report Generators
+    # Report Generators (Text + Excel)
     # ─────────────────────────────────────────────────────────────
 
-    async def _generate_daily_report(self, user: User) -> str:
-        """Generate dan format laporan harian."""
+    async def _generate_daily_report(self, user: User) -> dict:
+        """Generate laporan harian: teks + file Excel."""
         try:
             report = await self._report_service.get_daily_report(user.phone_number)
-            from utils.date_helper import format_short_date_id
             import datetime
 
             date_str = format_short_date_id(
                 datetime.datetime.combine(report.report_date, datetime.time.min)
             )
-            return tmpl.daily_report(
+            report_text = tmpl.daily_report(
                 date_str=date_str,
                 total_income=report.total_income,
                 total_expense=report.total_expense,
                 net_profit=report.net_profit,
                 tx_count=report.transaction_count,
             )
+
+            # Get transactions for Excel
+            start, end = get_today_range()
+            transactions = await self._tx_repo.find_by_date_range(
+                phone_number=user.phone_number,
+                start_date=start,
+                end_date=end,
+            )
+
+            excel_path = None
+            excel_filename = None
+            if transactions:
+                report_date = now_wib()
+                excel_path = await self._excel_service.generate_daily_report(
+                    transactions=transactions,
+                    phone_number=user.phone_number,
+                    report_date=report_date,
+                    total_income=report.total_income,
+                    total_expense=report.total_expense,
+                    net_profit=report.net_profit,
+                )
+                excel_filename = f"Laporan_Harian_{report_date.strftime('%Y%m%d')}.xlsx"
+
+            return {
+                "type": "report",
+                "text": report_text,
+                "excel_path": excel_path,
+                "excel_filename": excel_filename,
+            }
+
         except Exception as e:
             logger.error(f"Error generating daily report: {e}")
-            return tmpl.SYSTEM_ERROR_MESSAGE
+            return {"type": "text", "text": tmpl.SYSTEM_ERROR_MESSAGE}
 
-    async def _generate_monthly_report(self, user: User) -> str:
-        """Generate dan format laporan bulanan."""
+    async def _generate_monthly_report(self, user: User) -> dict:
+        """Generate laporan bulanan: teks + file Excel."""
         try:
             report = await self._report_service.get_monthly_report(user.phone_number)
-            return tmpl.monthly_report(
+            report_text = tmpl.monthly_report(
                 month_name=report.month_name,
                 year=report.year,
                 total_income=report.total_income,
@@ -366,9 +543,43 @@ class ChatbotService:
                 tx_count=report.transaction_count,
                 debt_count=report.debt_count,
             )
+
+            # Get transactions for Excel
+            start, end = get_current_month_range()
+            transactions = await self._tx_repo.find_by_date_range(
+                phone_number=user.phone_number,
+                start_date=start,
+                end_date=end,
+            )
+
+            excel_path = None
+            excel_filename = None
+            if transactions:
+                current = now_wib()
+                month_name = get_month_name_id(current.month)
+                excel_path = await self._excel_service.generate_monthly_report(
+                    transactions=transactions,
+                    phone_number=user.phone_number,
+                    year=current.year,
+                    month=current.month,
+                    month_name=month_name,
+                    total_income=report.total_income,
+                    total_expense=report.total_expense,
+                    total_debt=report.total_debt,
+                    net_profit=report.net_profit,
+                )
+                excel_filename = f"Laporan_Bulanan_{month_name}_{current.year}.xlsx"
+
+            return {
+                "type": "report",
+                "text": report_text,
+                "excel_path": excel_path,
+                "excel_filename": excel_filename,
+            }
+
         except Exception as e:
             logger.error(f"Error generating monthly report: {e}")
-            return tmpl.SYSTEM_ERROR_MESSAGE
+            return {"type": "text", "text": tmpl.SYSTEM_ERROR_MESSAGE}
 
     # ─────────────────────────────────────────────────────────────
     # Input Parser
