@@ -180,98 +180,6 @@ class WhatsAppService:
             logger.error(f"❌ Cannot check Evolution API status: {e}")
             return {"state": "error", "error": str(e)}
 
-    async def send_button_message(
-        self,
-        phone_number: str,
-        text: str,
-        buttons: list[dict],
-        footer: str = "FinanceBot UMKM",
-    ) -> bool:
-        """
-        Kirim pesan dengan tombol interaktif (max 3 tombol).
-        
-        Digunakan untuk menu dengan sedikit opsi (laporan: 2 pilihan).
-        Jika gagal, fallback ke pesan teks biasa.
-        
-        Args:
-            phone_number: Nomor tujuan "628xxx"
-            text: Isi pesan utama
-            buttons: List of {"displayText": "...", "id": "..."}
-            footer: Teks kecil di bawah (opsional)
-        """
-        url = f"{self._base_url}/message/sendButtons/{self._instance}"
-
-        payload = {
-            "number": phone_number,
-            "title": "",
-            "description": text,
-            "footer": footer,
-            "buttons": [
-                {"type": "reply", "displayText": btn["displayText"], "id": btn.get("id", btn["displayText"])}
-                for btn in buttons
-            ],
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(
-                    url, json=payload, headers=self._headers
-                )
-                response.raise_for_status()
-                logger.debug(f"🔘 Button message sent to {phone_number}")
-                return True
-
-        except Exception as e:
-            logger.warning(f"⚠️ Button message failed, falling back to text: {e}")
-            # Fallback: kirim sebagai teks biasa
-            return await self.send_text_message(phone_number, text)
-
-    async def send_list_message(
-        self,
-        phone_number: str,
-        text: str,
-        button_text: str,
-        sections: list[dict],
-        footer: str = "FinanceBot UMKM",
-        delay_ms: int = 0,
-    ) -> bool:
-        """
-        Kirim pesan dengan daftar interaktif (list message).
-        
-        Digunakan untuk menu utama yang punya >3 opsi.
-        User klik tombol → muncul popup list → pilih → otomatis terkirim.
-        
-        Args:
-            phone_number: Nomor tujuan
-            text: Pesan utama
-            button_text: Teks tombol (misal: "Pilih Menu")
-            sections: List of {"title": "...", "rows": [{"title": "...", "rowId": "...", "description": "..."}]}
-            footer: Teks kecil di bawah
-        """
-        url = f"{self._base_url}/message/sendList/{self._instance}"
-
-        payload = {
-            "number": phone_number,
-            "title": "",
-            "description": text,
-            "buttonText": button_text,
-            "footerText": footer,
-            "sections": sections,
-            "delay": delay_ms,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(
-                    url, json=payload, headers=self._headers
-                )
-                response.raise_for_status()
-                logger.debug(f"📋 List message sent to {phone_number}")
-                return True
-
-        except Exception as e:
-            logger.warning(f"⚠️ List message failed, falling back to text: {e}")
-            return await self.send_text_message(phone_number, text, delay_ms=delay_ms)
 
     async def send_document(
         self,
@@ -323,7 +231,7 @@ class WhatsAppService:
                 "mimetype": mimetype,
                 "caption": caption,
                 "fileName": filename,
-                "media": f"data:{mimetype};base64,{b64_data}",
+                "media": b64_data,
             }
 
             async with httpx.AsyncClient(timeout=30.0) as client:

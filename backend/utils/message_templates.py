@@ -17,14 +17,24 @@ WELCOME_TEXT = """👋 *Selamat datang di FinanceBot UMKM!*
 
 Saya siap membantu Anda mencatat keuangan bisnis dengan mudah.
 
-Silakan pilih menu di bawah untuk memulai 👇"""
+Silakan ketik nomor menu di bawah untuk memulai 👇
+
+1️⃣ *Catat Pemasukan*
+2️⃣ *Catat Pengeluaran*
+3️⃣ *Catat Hutang*
+4️⃣ *Lihat Laporan*"""
 
 # Keep old constants for backward compatibility (fallback text)
 WELCOME_MESSAGE = WELCOME_TEXT
 
 MENU_TEXT = """📋 *Menu Utama FinanceBot UMKM*
 
-Silakan pilih menu yang ingin Anda gunakan 👇"""
+Silakan ketik nomor menu yang ingin Anda gunakan 👇
+
+1️⃣ *Catat Pemasukan*
+2️⃣ *Catat Pengeluaran*
+3️⃣ *Catat Hutang*
+4️⃣ *Lihat Laporan*"""
 
 MENU_MESSAGE = MENU_TEXT
 
@@ -40,7 +50,7 @@ Kata kunci yang bisa digunakan:
 • *Laporan Bulan Ini* — Laporan bulanan
 • *Batal* — Batalkan input saat ini
 
-💡 Anda juga bisa langsung klik tombol di bawah pesan untuk navigasi yang lebih mudah!
+💡 Anda tinggal ketik angka (misal: 1) untuk memilih menu.
 
 Butuh bantuan lebih? Hubungi admin."""
 
@@ -85,7 +95,13 @@ Atau ketik *Batal* untuk kembali ke menu."""
 REPORT_MENU_TEXT = """📊 *Laporan Keuangan*
 
 Pilih jenis laporan yang ingin Anda lihat.
-Setiap laporan disertai file Excel yang bisa diunduh 📎"""
+Setiap laporan disertai file Excel yang bisa diunduh 📎
+
+Ketik angka pilihan Anda:
+1️⃣ *Laporan Hari Ini*
+2️⃣ *Laporan Bulan Ini*
+
+Ketik *Batal* untuk kembali ke Menu Utama."""
 
 # Keep old constant for backward compatibility
 REPORT_MENU = REPORT_MENU_TEXT
@@ -102,7 +118,7 @@ def income_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Mau catat lagi? Pilih menu di bawah 👇"""
+Mau catat lagi? Ketik *Menu* untuk melihat pilihan."""
 
 
 def expense_success(description: str, amount: float, date_str: str) -> str:
@@ -112,7 +128,7 @@ def expense_success(description: str, amount: float, date_str: str) -> str:
 💸 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Mau catat lagi? Pilih menu di bawah 👇"""
+Mau catat lagi? Ketik *Menu* untuk melihat pilihan."""
 
 
 def debt_success(description: str, amount: float, date_str: str) -> str:
@@ -122,7 +138,7 @@ def debt_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Pilih menu di bawah untuk melanjutkan 👇"""
+Ketik *Menu* untuk melanjutkan."""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -166,6 +182,17 @@ def monthly_report(
     debt_count: int,
 ) -> str:
     profit_emoji = "📈" if net_profit >= 0 else "📉"
+    
+    debt_text = ""
+    debt_count_text = ""
+    if total_debt > 0:
+        debt_text = f"""
+💳 Total Hutang Belum Lunas:
+    {format_rupiah(total_debt)}
+"""
+    if debt_count > 0:
+        debt_count_text = f"\n⚠️ Sisa Hutang: {debt_count}"
+
     return f"""📊 *Laporan Bulanan*
 📅 {month_name} {year}
 ━━━━━━━━━━━━━━━━━━
@@ -175,15 +202,11 @@ def monthly_report(
 
 💸 Total Pengeluaran:
     {format_rupiah(total_expense)}
-
-💳 Total Hutang Belum Lunas:
-    {format_rupiah(total_debt)}
-
+{debt_text}
 {profit_emoji} Laba Bersih:
     {format_rupiah(net_profit)}
 
-📝 Total Transaksi: {tx_count}
-🔴 Hutang Belum Lunas: {debt_count}
+📝 Total Transaksi: {tx_count}{debt_count_text}
 ━━━━━━━━━━━━━━━━━━
 📎 _File Excel detail terlampir di bawah._"""
 
@@ -225,7 +248,7 @@ Ketik *Menu* untuk kembali."""
 
 CANCELLED_TEXT = """🔙 *Dibatalkan*
 
-Kembali ke menu utama. Pilih menu di bawah 👇"""
+Kembali ke menu utama. Ketik *Menu* untuk melihat daftar."""
 
 # Keep old constant
 CANCELLED_MESSAGE = CANCELLED_TEXT + "\n\n" + MENU_TEXT

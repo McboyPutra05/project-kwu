@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime
 from typing import List
 
-
+from loguru import logger  # type: ignore
 from openpyxl import Workbook
 from openpyxl.styles import (
     Alignment,

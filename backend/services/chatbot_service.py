@@ -80,52 +80,10 @@ INCOME_KEYWORDS = {"pemasukan", "masuk", "income", "1", "catat pemasukan"}
 EXPENSE_KEYWORDS = {"pengeluaran", "keluar", "expense", "pengeluaran", "2", "catat pengeluaran"}
 DEBT_KEYWORDS = {"hutang", "utang", "debt", "3", "catat hutang"}
 REPORT_KEYWORDS = {"laporan", "report", "4", "lihat laporan"}
-CANCEL_KEYWORDS = {"batal", "cancel", "kembali", "back"}
+CANCEL_KEYWORDS = {"batal", "cancel", "kembali", "back", "selesai", "tutup"}
 DAILY_REPORT_KEYWORDS = {"laporan hari ini", "hari ini", "1", "daily"}
 MONTHLY_REPORT_KEYWORDS = {"laporan bulan ini", "bulan ini", "2", "monthly"}
 HELP_KEYWORDS = {"bantuan", "help", "?"}
-
-# ─────────────────────────────────────────────────────────────────
-# Interactive Menu Definitions
-# ─────────────────────────────────────────────────────────────────
-
-MAIN_MENU_SECTIONS = [
-    {
-        "title": "📋 Menu Utama",
-        "rows": [
-            {
-                "title": "📥 Catat Pemasukan",
-                "rowId": "1",
-                "description": "Catat uang masuk ke bisnis Anda",
-            },
-            {
-                "title": "📤 Catat Pengeluaran",
-                "rowId": "2",
-                "description": "Catat uang keluar dari bisnis Anda",
-            },
-            {
-                "title": "💳 Catat Hutang",
-                "rowId": "3",
-                "description": "Catat hutang yang perlu dibayar",
-            },
-            {
-                "title": "📊 Lihat Laporan",
-                "rowId": "4",
-                "description": "Laporan harian & bulanan + Export Excel",
-            },
-        ],
-    }
-]
-
-REPORT_BUTTONS = [
-    {"displayText": "📊 Laporan Hari Ini", "id": "1"},
-    {"displayText": "📈 Laporan Bulan Ini", "id": "2"},
-    {"displayText": "🔙 Kembali", "id": "batal"},
-]
-
-BACK_TO_MENU_BUTTONS = [
-    {"displayText": "📋 Menu Utama", "id": "menu"},
-]
 
 
 class ChatbotService:
@@ -194,21 +152,7 @@ class ChatbotService:
             # Interactive message (button / list / document combo)
             msg_type = response.get("type", "text")
 
-            if msg_type == "list":
-                await self._wa_service.send_list_message(
-                    phone_number=phone,
-                    text=response["text"],
-                    button_text=response.get("button_text", "Pilih Menu"),
-                    sections=response["sections"],
-                    delay_ms=delay_ms,
-                )
-            elif msg_type == "buttons":
-                await self._wa_service.send_button_message(
-                    phone_number=phone,
-                    text=response["text"],
-                    buttons=response["buttons"],
-                )
-            elif msg_type == "report":
+            if msg_type == "report":
                 # Kirim teks laporan dulu
                 await self._wa_service.send_text_message(
                     phone_number=phone,
@@ -228,11 +172,12 @@ class ChatbotService:
                         os.remove(response["excel_path"])
                     except OSError:
                         pass
-                # Kirim tombol kembali ke menu
-                await self._wa_service.send_button_message(
+                
+                # Kirim pesan teks kembali ke menu setelah laporan
+                await self._wa_service.send_text_message(
                     phone_number=phone,
-                    text="Apa yang ingin Anda lakukan selanjutnya?",
-                    buttons=BACK_TO_MENU_BUTTONS,
+                    message="Ketik *Menu* untuk kembali ke pilihan utama.",
+                    delay_ms=delay_ms + 500,
                 )
             else:
                 await self._wa_service.send_text_message(
@@ -262,12 +207,7 @@ class ChatbotService:
         # ── Cancel selalu bisa dilakukan dari state apapun ──
         if text_lower in CANCEL_KEYWORDS:
             await self._user_repo.update_session_state(user, None)
-            return {
-                "type": "list",
-                "text": tmpl.CANCELLED_TEXT,
-                "button_text": "Pilih Menu",
-                "sections": MAIN_MENU_SECTIONS,
-            }
+            return tmpl.CANCELLED_TEXT
 
         # ── Help selalu bisa dilakukan dari state apapun ────
         if text_lower in HELP_KEYWORDS:
@@ -292,12 +232,7 @@ class ChatbotService:
         else:
             # State tidak dikenal — reset ke idle dan tampilkan menu
             await self._user_repo.update_session_state(user, None)
-            return {
-                "type": "list",
-                "text": tmpl.WELCOME_TEXT,
-                "button_text": "Pilih Menu",
-                "sections": MAIN_MENU_SECTIONS,
-            }
+            return tmpl.WELCOME_TEXT
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Menu Utama
@@ -310,12 +245,7 @@ class ChatbotService:
         # Salam / inisiasi → kirim list message
         if text_lower in GREETING_KEYWORDS:
             await self._user_repo.update_session_state(user, "menu_main")
-            return {
-                "type": "list",
-                "text": tmpl.WELCOME_TEXT,
-                "button_text": "Pilih Menu",
-                "sections": MAIN_MENU_SECTIONS,
-            }
+            return tmpl.WELCOME_TEXT
 
         # Navigasi ke sub-menu
         if text_lower in INCOME_KEYWORDS:
@@ -332,11 +262,7 @@ class ChatbotService:
 
         if text_lower in REPORT_KEYWORDS:
             await self._user_repo.update_session_state(user, "report_menu")
-            return {
-                "type": "buttons",
-                "text": tmpl.REPORT_MENU_TEXT,
-                "buttons": REPORT_BUTTONS,
-            }
+            return tmpl.REPORT_MENU_TEXT
 
         # Shortcut laporan langsung
         if "hari ini" in text_lower:
@@ -377,12 +303,7 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return {
-            "type": "list",
-            "text": tmpl.income_success(description, amount, date_str),
-            "button_text": "Pilih Menu",
-            "sections": MAIN_MENU_SECTIONS,
-        }
+        return tmpl.income_success(description, amount, date_str)
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Input Pengeluaran
@@ -411,12 +332,7 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return {
-            "type": "list",
-            "text": tmpl.expense_success(description, amount, date_str),
-            "button_text": "Pilih Menu",
-            "sections": MAIN_MENU_SECTIONS,
-        }
+        return tmpl.expense_success(description, amount, date_str)
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Input Hutang
@@ -445,12 +361,7 @@ class ChatbotService:
         await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
-        return {
-            "type": "list",
-            "text": tmpl.debt_success(description, amount, date_str),
-            "button_text": "Pilih Menu",
-            "sections": MAIN_MENU_SECTIONS,
-        }
+        return tmpl.debt_success(description, amount, date_str)
 
     # ─────────────────────────────────────────────────────────────
     # Handler: Menu Laporan
@@ -468,12 +379,8 @@ class ChatbotService:
             await self._user_repo.update_session_state(user, None)
             return await self._generate_monthly_report(user)
 
-        # Pilihan tidak valid
-        return {
-            "type": "buttons",
-            "text": tmpl.REPORT_MENU_TEXT,
-            "buttons": REPORT_BUTTONS,
-        }
+        # Pilihan tidak valid, kembalikan teks menu laporan lagi
+        return tmpl.REPORT_MENU_TEXT
 
     # ─────────────────────────────────────────────────────────────
     # Report Generators (Text + Excel)
