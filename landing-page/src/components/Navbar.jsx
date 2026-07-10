@@ -4,7 +4,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           <div className="flex-shrink-0">
-            <span className="text-2xl font-black tracking-tight text-primary italic">FinanceBot</span>
+            <span className="text-2xl font-black tracking-tight text-primary">ChaTet</span>
           </div>
           <div className="hidden md:flex items-center space-x-10">
             <a href="#features" className="text-slate-600 hover:text-primary transition-colors text-sm font-semibold">Features</a>
