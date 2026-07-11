@@ -78,18 +78,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("✅ Application started successfully")
     logger.info(f"📖 API Docs: http://{settings.host}:{settings.port}/docs")
 
-    # Jalankan background worker
-    timeout_task = asyncio.create_task(timeout_worker())
+    # Jalankan background worker jika tidak berjalan di Vercel (Serverless)
+    import os
+    if not os.environ.get("VERCEL"):
+        timeout_task = asyncio.create_task(timeout_worker())
+    else:
+        timeout_task = None
+        logger.info("⚡ Berjalan di Vercel, timeout_worker dinonaktifkan")
 
     yield  # Aplikasi berjalan di sini
 
     # ── Shutdown ───────────────────────────────────────────────
     logger.info("🛑 Shutting down application...")
-    timeout_task.cancel()
-    try:
-        await timeout_task
-    except asyncio.CancelledError:
-        pass
+    if timeout_task:
+        timeout_task.cancel()
+        try:
+            await timeout_task
+        except asyncio.CancelledError:
+            pass
     
     await close_db()
     logger.info("👋 Application stopped")

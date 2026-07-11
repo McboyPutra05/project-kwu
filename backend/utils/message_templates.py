@@ -118,7 +118,8 @@ def income_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Mau catat lagi? Ketik *Menu* untuk melihat pilihan."""
+Silakan ketik langsung data pemasukan selanjutnya jika ada.
+Atau ketik *Menu* untuk kembali ke pilihan utama."""
 
 
 def expense_success(description: str, amount: float, date_str: str) -> str:
@@ -128,7 +129,8 @@ def expense_success(description: str, amount: float, date_str: str) -> str:
 💸 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Mau catat lagi? Ketik *Menu* untuk melihat pilihan."""
+Silakan ketik langsung data pengeluaran selanjutnya jika ada.
+Atau ketik *Menu* untuk kembali ke pilihan utama."""
 
 
 def debt_success(description: str, amount: float, date_str: str) -> str:
@@ -138,7 +140,8 @@ def debt_success(description: str, amount: float, date_str: str) -> str:
 💰 Jumlah: {format_rupiah(amount)}
 📅 Tanggal: {date_str}
 
-Ketik *Menu* untuk melanjutkan."""
+Silakan ketik langsung data hutang selanjutnya jika ada.
+Atau ketik *Menu* untuk kembali ke pilihan utama."""
 
 
 # ─────────────────────────────────────────────────────────────────

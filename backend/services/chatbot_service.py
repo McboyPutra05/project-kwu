@@ -135,6 +135,11 @@ class ChatbotService:
             name=incoming.sender_name,
         )
 
+        # Selalu update timestamp setiap ada pesan masuk 
+        # agar hitungan timeout 3 menit selalu direset
+        user.update_timestamp()
+        await self._user_repo.update(user)
+
         # ── 2. Tentukan response berdasarkan state ─────────────
         response = await self._dispatch(
             user=user, text=text, text_lower=text_lower
@@ -208,6 +213,11 @@ class ChatbotService:
         if text_lower in CANCEL_KEYWORDS:
             await self._user_repo.update_session_state(user, None)
             return tmpl.CANCELLED_TEXT
+
+        # ── Menu selalu bisa diakses dari state apapun ──
+        if text_lower in GREETING_KEYWORDS:
+            await self._user_repo.update_session_state(user, None)
+            return await self._handle_menu(user, "menu")
 
         # ── Help selalu bisa dilakukan dari state apapun ────
         if text_lower in HELP_KEYWORDS:
@@ -299,9 +309,6 @@ class ChatbotService:
             amount=amount,
         )
 
-        # Reset state
-        await self._user_repo.update_session_state(user, None)
-
         date_str = format_short_date_id(now_wib())
         return tmpl.income_success(description, amount, date_str)
 
@@ -329,8 +336,6 @@ class ChatbotService:
             amount=amount,
         )
 
-        await self._user_repo.update_session_state(user, None)
-
         date_str = format_short_date_id(now_wib())
         return tmpl.expense_success(description, amount, date_str)
 
@@ -357,8 +362,6 @@ class ChatbotService:
             description=description,
             amount=amount,
         )
-
-        await self._user_repo.update_session_state(user, None)
 
         date_str = format_short_date_id(now_wib())
         return tmpl.debt_success(description, amount, date_str)
